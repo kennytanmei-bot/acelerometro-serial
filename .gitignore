@@ -1,0 +1,19 @@
+# Arquivos e pastas de configuração do editor VS Code
+.vscode/
+
+# Pasta principal do PlatformIO com builds, toolchains e dependências.
+# Esta é a pasta mais importante a ser ignorada.
+.pio/
+
+# Arquivos de build do C/C++
+*.o
+*.d
+*.a
+*.so
+*.elf
+*.bin
+*.hex
+
+# Arquivos gerados pelo Python
+__pycache__/
+*.pyc

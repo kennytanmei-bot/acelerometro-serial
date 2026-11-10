@@ -1,0 +1,37 @@
+# Atividade Acelerômetro - Serial (FRDM-KL25Z + MMA8451Q, Zephyr)
+
+## Como usar
+0. O `platformio.ini` fixa o Zephyr 4.2 (`framework-zephyr@~3.40200.0`); a primeira
+   compilação demora vários minutos porque baixa esse framework.
+1. `pio run -t upload` (grava o firmware pela OpenSDA).
+2. Verifique a porta COM da placa e ajuste `PORTA_SERIAL` em `leitor_serial.py`.
+3. Deixe a placa **parada e plana nos primeiros ~3 s** (calibração do offset/gravidade).
+4. `python leitor_serial.py`, mova a placa, Ctrl+C para parar.
+5. `python gerar_graficos.py` gera `graficos_atividade2.png` (aceleração, velocidade, posição).
+
+## Estratégia das threads e escalonamento
+
+O firmware tem 3 threads ligadas por filas de mensagens (`k_msgq`):
+
+| Thread | Prioridade | Função |
+|---|---|---|
+| aquisição | 4 (maior) | lê o MMA8451Q via I²C0 a cada 50 ms (ODR do sensor configurado em 50 Hz) |
+| integração | 5 | calibra o offset e integra a→v→p (regra dos trapézios) |
+| serial | 6 (menor) | formata e envia o CSV pela UART |
+
+- O escalonador do Zephyr é **preemptivo por prioridade** (número menor = prioridade maior).
+  A thread de aquisição tem a maior prioridade porque precisa respeitar o período de
+  amostragem: o `dt` usado na integração é fixo (0,05 s), então qualquer atraso na leitura
+  vira erro de velocidade e posição.
+- A aquisição usa `k_sleep(K_TIMEOUT_ABS_MS(...))` (período absoluto), que evita acumular
+  jitter. Ela passa quase todo o tempo bloqueada, então não prejudica as outras.
+- A integração e a serial ficam bloqueadas em `k_msgq_get(K_FOREVER)` e só executam quando há
+  dado novo (sem espera ocupada). A serial tem a menor prioridade porque é a mais lenta
+  (115200 bps) e a que menos pode atrasar o resto; enquanto ela espera o hardware da UART,
+  as outras ainda rodam.
+- As filas desacoplam as threads. A aquisição usa `K_NO_WAIT` no `put`: se a fila encher,
+  descarta a amostra em vez de bloquear e perder o período.
+- Não há recurso compartilhado entre threads (só filas), então não precisa de mutex.
+- Integração: trapézios, `v[k] = v[k-1] + dt*(a[k-1]+a[k])/2` e o mesmo para a posição.
+  A integração dupla acumula erro (deriva), por isso há calibração do offset e uma zona
+  morta de ruído (0,05 m/s²). Mesmo assim, a posição estimada deriva com o tempo.
