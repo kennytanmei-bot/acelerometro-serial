@@ -22,7 +22,7 @@ def iniciar_leitura():
 
             while True:
                 if conexao.in_waiting > 0:
-                    linha = conexao.readline().decode('utf-8').strip()
+                    linha = conexao.readline().decode('utf-8', errors = 'ignore').strip()
                     
                     if not linha:
                         continue
